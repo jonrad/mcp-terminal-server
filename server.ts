@@ -2,9 +2,10 @@ import { registerAppResource, registerAppTool, RESOURCE_MIME_TYPE } from "@model
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult, ReadResourceResult } from "@modelcontextprotocol/sdk/types.js";
 import crypto from "node:crypto";
-import { accessSync, constants } from "node:fs";
+import { accessSync, chmodSync, constants } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import * as pty from "node-pty";
 import stripAnsi from "strip-ansi";
@@ -59,6 +60,19 @@ interface SpawnResult {
   label: string;
 }
 
+// Fix node-pty spawn-helper permissions (npm doesn't preserve +x from tarballs)
+let spawnHelperFixed = false;
+function fixSpawnHelper(): void {
+  if (spawnHelperFixed) return;
+  spawnHelperFixed = true;
+  try {
+    const require = createRequire(import.meta.url);
+    const ptyDir = path.dirname(require.resolve("node-pty"));
+    const helper = path.join(ptyDir, "..", "prebuilds", `${process.platform}-${process.arch}`, "spawn-helper");
+    chmodSync(helper, 0o755);
+  } catch {}
+}
+
 function findShell(): string {
   const candidates = [
     process.env.SHELL,
@@ -74,6 +88,7 @@ function findShell(): string {
 }
 
 function spawnTerminal(command?: string, style?: Partial<TabStyle>, cwd?: string): SpawnResult {
+  fixSpawnHelper();
   const sessionId = crypto.randomUUID();
   const shell = findShell();
   const label = command || path.basename(shell);
