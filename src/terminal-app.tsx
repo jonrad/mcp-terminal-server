@@ -438,6 +438,8 @@ function TerminalPane({ app, sessionId, visible }: TerminalPaneProps) {
   const fitAddonRef = useRef<FitAddon | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const openedRef = useRef(false);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
 
   // Create xterm instance once on mount (but don't open it yet)
   useEffect(() => {
@@ -504,14 +506,20 @@ function TerminalPane({ app, sessionId, visible }: TerminalPaneProps) {
     };
 
     let resizeTimer: ReturnType<typeof setTimeout>;
+    let lastResizeCols = 0;
+    let lastResizeRows = 0;
+    const sendResize = (cols: number, rows: number) => {
+      if (cols === lastResizeCols && rows === lastResizeRows) return;
+      lastResizeCols = cols;
+      lastResizeRows = rows;
+      app.callServerTool({
+        name: "terminal-resize",
+        arguments: { sessionId, cols, rows },
+      }).catch(() => {});
+    };
     terminal.onResize(({ cols, rows }) => {
       clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        app.callServerTool({
-          name: "terminal-resize",
-          arguments: { sessionId, cols, rows },
-        }).catch(() => {});
-      }, 50);
+      resizeTimer = setTimeout(() => sendResize(cols, rows), 50);
     });
 
     terminal.onData((data) => {
@@ -523,7 +531,7 @@ function TerminalPane({ app, sessionId, visible }: TerminalPaneProps) {
     });
 
     const handleResize = () => {
-      if (!openedRef.current) return;
+      if (!openedRef.current || !visibleRef.current) return;
       fitAddon.fit();
     };
     window.addEventListener("resize", handleResize);
@@ -582,15 +590,20 @@ function TerminalPane({ app, sessionId, visible }: TerminalPaneProps) {
       }
     }
 
-    // Double-rAF ensures layout has settled after display:none → display:block
-    // then re-fit and trigger a SIGWINCH so the running program redraws
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      fitAddon?.fit();
+    // Fit after layout settles, then send resize immediately (bypassing debounce).
+    // pty.resize() sends SIGWINCH automatically, so no need for terminal-refresh.
+    // Retry after 200ms in case the first fit measured before layout was ready.
+    const doFit = () => {
+      if (!fitAddon || !terminal) return;
+      fitAddon.fit();
       app.callServerTool({
-        name: "terminal-refresh",
-        arguments: { sessionId },
+        name: "terminal-resize",
+        arguments: { sessionId, cols: terminal.cols, rows: terminal.rows },
       }).catch(() => {});
-    }));
+    };
+    requestAnimationFrame(() => requestAnimationFrame(doFit));
+    const retryTimer = setTimeout(doFit, 200);
+    return () => clearTimeout(retryTimer);
   }, [visible]);
 
   return (
