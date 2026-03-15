@@ -2,6 +2,12 @@
 
 An MCP App that renders an interactive xterm.js terminal inline in Claude Code and Claude Desktop. Multi-session PTY support via `node-pty` with tabbed UI.
 
+![Terminal with customized tabs in Claude Code](screenshot-zsh.png)
+
+Yo dawg, I heard you like Claude, so I put Claude in your Claude so you can Claude while you Claude.
+
+![Claude running Claude Code inside Claude Desktop](screenshot-claude.png)
+
 ## MCP Client Configuration
 
 Add to your MCP client configuration (stdio transport):
