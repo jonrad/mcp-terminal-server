@@ -81,7 +81,7 @@ function spawnTerminal(command?: string, style?: Partial<TabStyle>, cwd?: string
   let resolvedCwd = cwd || process.env.HOME || process.cwd();
   try { accessSync(resolvedCwd, constants.R_OK); } catch { resolvedCwd = process.cwd(); }
 
-  const proc = pty.spawn(shell, command ? ["-c", command] : [], {
+  const proc = pty.spawn(shell, command ? ["-lic", command] : ["-li"], {
     name: "xterm-256color",
     cols: 80,
     rows: 24,
