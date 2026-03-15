@@ -479,6 +479,7 @@ function TerminalPane({ app, sessionId, visible }: TerminalPaneProps) {
         console.warn("write error:", e);
       }
       writeInFlight = false;
+      kickPoll();
       if (writeBuf) flushWrite();
     };
 
@@ -511,18 +512,28 @@ function TerminalPane({ app, sessionId, visible }: TerminalPaneProps) {
     const POLL_IDLE = 400;
     let timeoutId: ReturnType<typeof setTimeout>;
     let consecutiveErrors = 0;
+    let pollInFlight = false;
+
     const poll = async () => {
+      pollInFlight = true;
       const hadData = await pollRead();
+      pollInFlight = false;
       if (hadData === null) {
         consecutiveErrors++;
-        if (consecutiveErrors >= 5) return; // stop polling for dead sessions
+        if (consecutiveErrors >= 5) return;
       } else if (hadData) {
         consecutiveErrors = 0;
       }
-      // Don't reset error count on empty responses — only on actual data
       timeoutId = setTimeout(poll, hadData ? POLL_ACTIVE : POLL_IDLE);
     };
     poll();
+
+    // Kick poll immediately after a write so output comes back faster
+    const kickPoll = () => {
+      if (pollInFlight) return;
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(poll, 0);
+    };
 
     return () => {
       clearTimeout(timeoutId);
